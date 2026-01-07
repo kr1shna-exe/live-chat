@@ -43,3 +43,13 @@ export const supervisorMiddleware = async (req: Request, res: Response, next: Ne
   };
   next();
 }
+
+export const adminMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.role || req.role !== "admin") {
+    return res.status(403).json({
+      "success": false,
+      "error": "Forbidden, insufficient permissions"
+    });
+  };
+  next();
+}

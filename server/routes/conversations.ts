@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
+import { adminMiddleware, authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
 import { conversationSchema, agentSchema } from "../types";
 import { ConversationModel, MessageModel, UserModel } from "../db/models";
 import { inMemoryMessages } from "../lib/messageStore";
@@ -141,6 +141,25 @@ router.get("/conversations/:id", authMiddleware, async (req, res) => {
       "supervisorId": conversation.supervisorId,
       "candidateId": conversation.candidateId,
       "messages": messages
+    }
+  });
+});
+
+router.post("/conversations/:id/close", supervisorMiddleware, adminMiddleware, async (req, res) => {
+  const conversation = await ConversationModel.findById(req.params.id);
+  if (conversation?.status !== "open") {
+    return res.status(400).json({
+      "success": false,
+      "error": "Conversation is still going on"
+    });
+  };
+  conversation.status = "closed";
+  await conversation.save();
+  return res.status(200).json({
+    "success": true,
+    "data": {
+      "conversation_id": conversation._id,
+      "status": conversation.status
     }
   });
 });
