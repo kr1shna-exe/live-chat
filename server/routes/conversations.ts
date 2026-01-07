@@ -145,7 +145,7 @@ router.get("/conversations/:id", authMiddleware, async (req, res) => {
   });
 });
 
-router.post("/conversations/:id/close", supervisorMiddleware, adminMiddleware, async (req, res) => {
+router.post("/conversations/:id/close", authMiddleware, async (req, res) => {
   const conversation = await ConversationModel.findById(req.params.id);
   if (conversation?.status !== "open") {
     return res.status(400).json({
@@ -153,7 +153,8 @@ router.post("/conversations/:id/close", supervisorMiddleware, adminMiddleware, a
       "error": "Conversation is still going on"
     });
   };
-  conversation.status = "closed";
+  if ()
+    conversation.status = "closed";
   await conversation.save();
   return res.status(200).json({
     "success": true,
