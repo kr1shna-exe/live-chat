@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
+import { adminMiddleware, authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
 import { conversationSchema, agentSchema } from "../types";
 import { ConversationModel, MessageModel, UserModel } from "../db/models";
 import { inMemoryMessages } from "../lib/messageStore";
@@ -175,5 +175,37 @@ router.post("/conversations/:id/close", authMiddleware, async (req, res) => {
       "conversation_id": conversation._id,
       "status": conversation.status
     }
+  });
+});
+
+router.get("/admin/analytics", adminMiddleware, async (req, res) => {
+  let analyticsData = [];
+
+  const supervisors = await UserModel.find({
+    role: "supervisor"
+  });
+
+  for (const supervisor of supervisors) {
+    const agents = await UserModel.find({
+      role: "agent",
+      supervisorId: supervisor._id
+    }).select("_id");
+    const agentsId = agents.map(agent => agent._id);
+    const closedConversations = await ConversationModel.countDocuments({
+      status: "closed",
+      agentId: { $in: agentsId }
+    });
+
+    analyticsData.push({
+      "supervisorId": supervisor._id,
+      "supervisorName": supervisor.name,
+      "agents": agents.length,
+      "conversationsHandled": closedConversations
+    })
+  };
+
+  return res.status(200).json({
+    "success": true,
+    "data": analyticsData
   });
 });
