@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { adminMiddleware, authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
+import { authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
 import { conversationSchema, agentSchema } from "../types";
 import { ConversationModel, MessageModel, UserModel } from "../db/models";
 import { inMemoryMessages } from "../lib/messageStore";
@@ -146,15 +146,28 @@ router.get("/conversations/:id", authMiddleware, async (req, res) => {
 });
 
 router.post("/conversations/:id/close", authMiddleware, async (req, res) => {
+  if (req.role !== "admin" && req.role !== "supervisor") {
+    return res.status(403).json({
+      "success": false,
+      "error": "Forbidden, insufficient permissions"
+    });
+  };
+
   const conversation = await ConversationModel.findById(req.params.id);
   if (conversation?.status !== "open") {
     return res.status(400).json({
       "success": false,
-      "error": "Conversation is still going on"
+      "error": "Conversation is either going on or closed"
     });
   };
-  if ()
-    conversation.status = "closed";
+
+  if (req.role === "supervisor" && conversation.supervisorId.toString() !== req.userId) {
+    return res.status(403).json({
+      "success": false,
+      "error": "You can only close conversations assigned to you"
+    });
+  };
+  conversation.status = "closed";
   await conversation.save();
   return res.status(200).json({
     "success": true,
