@@ -2,9 +2,9 @@ import { Router } from "express";
 import { adminMiddleware, authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
 import { conversationSchema, agentSchema } from "../types";
 import { ConversationModel, MessageModel, UserModel } from "../db/models";
-import { inMemoryMessages } from "../lib/messageStore";
 
 const router = Router();
+const inMemoryMessages = new Map<string, any[]>();
 
 router.post("/conversations", authMiddleware, candidateMiddleware, async (req, res) => {
   const { success, data } = conversationSchema.safeParse(req.body);
