@@ -3,10 +3,7 @@ import type { ExtendWebSocket } from "./types";
 export const rooms = new Map<string, Set<ExtendWebSocket>>();
 
 export function joinRoom(ws: ExtendWebSocket, roomName: string) {
-  if (!ws.rooms) {
-    ws.rooms = new Set();
-  }
-  ws.rooms.add(roomName);
+  ws.rooms?.add(roomName);
   if (!rooms.has(roomName)) {
     rooms.set(roomName, new Set());
   }
@@ -24,11 +21,15 @@ export function leaveRoom(ws: ExtendWebSocket, roomName: string) {
   }
 }
 
-export function broadcastToRoom(roomName: string, message: any) {
+export function broadcastToRoom(roomName: string, message: any, excludeSocket?: ExtendWebSocket) {
   const room = rooms.get(roomName);
   if (!room) return;
   const messageStr = JSON.stringify(message);
   room.forEach(socket => {
+    if (excludeSocket && socket === excludeSocket) {
+      return;
+    }
+
     if (socket.readyState === 1) {
       socket.send(messageStr);
     }
