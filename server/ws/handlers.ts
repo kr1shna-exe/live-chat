@@ -5,6 +5,10 @@ import { addMessage, inMemoryMessages } from "../lib/messageStore";
 
 export async function handleJoinConversation(ws: ExtendWebSocket, data: any) {
   const { conversationId } = data;
+  if (!conversationId) {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid request schema" } }));
+    return;
+  }
   if (ws.user?.role !== "candidate" && ws.user?.role !== "agent") {
     ws.send(JSON.stringify({ event: "ERROR", data: { message: "Forbidden for this role" } }))
     return;
@@ -13,6 +17,11 @@ export async function handleJoinConversation(ws: ExtendWebSocket, data: any) {
   const conversation = await ConversationModel.findById(conversationId);
   if (!conversation) {
     ws.send(JSON.stringify({ event: "ERROR", data: { message: "Conversation not found" } }));
+    return;
+  }
+
+  if (conversation.status === "closed") {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Conversation already closed" } }));
     return;
   }
 
@@ -27,7 +36,7 @@ export async function handleJoinConversation(ws: ExtendWebSocket, data: any) {
       return;
     }
 
-    if (conversation.status == "open") {
+    if (conversation.status === "open") {
       conversation.status = "assigned";
       await conversation.save();
     }
@@ -41,7 +50,7 @@ export async function handleJoinConversation(ws: ExtendWebSocket, data: any) {
 
 export async function handleSendMessage(ws: ExtendWebSocket, data: any) {
   const { conversationId, content } = data;
-  if (!conversationId) {
+  if (!conversationId || !content) {
     ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid request schema" } }));
     return;
   }
