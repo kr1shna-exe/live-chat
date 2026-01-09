@@ -3,12 +3,13 @@ interface Message {
   senderId: string,
   senderRole: string,
   content: string,
-  createdAt: Date
+  createdAt: string
 }
 
 export const inMemoryMessages = new Map<string, Message[]>();
 
-export function addMessage(conversationId: string, message: Message) {
+export function addMessage(message: Message) {
+  const { conversationId } = message;
   if (!inMemoryMessages.has(conversationId)) {
     inMemoryMessages.set(conversationId, []);
   }
