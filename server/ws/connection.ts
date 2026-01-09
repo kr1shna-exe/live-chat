@@ -2,7 +2,7 @@ import { WebSocketServer } from "ws";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import type { ExtendWebSocket } from "./types";
 import { IncomingMessage } from "http";
-import { handleJoinConversation, handleLeaveConversation, handleSendMessage } from "./handlers";
+import { handleCloseConversation, handleJoinConversation, handleLeaveConversation, handleSendMessage } from "./handlers";
 import { leaveRoom, rooms } from "./rooms";
 
 export const wss = new WebSocketServer({ port: 8000 });
@@ -48,6 +48,10 @@ wss.on('connection', (ws: ExtendWebSocket, req: IncomingMessage) => {
 
         case "LEAVE_CONVERSATION":
           await handleLeaveConversation(ws, message.data);
+          break;
+
+        case "CLOSE_CONVERSATION":
+          await handleCloseConversation(ws, message.data);
           break;
 
         default:

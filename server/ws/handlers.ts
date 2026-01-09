@@ -1,7 +1,7 @@
 import type { ExtendWebSocket } from "./types";
-import { ConversationModel } from "../db/models";
-import { broadcastToRoom, joinRoom, leaveRoom } from "./rooms";
-import { addMessage, inMemoryMessages } from "../lib/messageStore";
+import { ConversationModel, MessageModel } from "../db/models";
+import { broadcastToRoom, joinRoom, leaveRoom, rooms } from "./rooms";
+import { addMessage, clearMessages, inMemoryMessages } from "../lib/messageStore";
 
 export async function handleJoinConversation(ws: ExtendWebSocket, data: any) {
   const { conversationId } = data;
@@ -110,4 +110,60 @@ export async function handleLeaveConversation(ws: ExtendWebSocket, data: any) {
   }
   leaveRoom(ws, roomName);
   return ws.send(JSON.stringify({ event: "LEFT_CONVERSATION", data: { conversationId: conversationId } }));
+}
+
+export async function handleCloseConversation(ws: ExtendWebSocket, data: any) {
+  const { conversationId } = data;
+  if (!conversationId) {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid request schema" } }));
+    return;
+  }
+
+  const conversation = await ConversationModel.findById(conversationId);
+  if (!conversation) {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Conversation not found" } }));
+    return;
+  }
+  const roomName = `conversation:${conversationId}`;
+
+  if (ws.user?.role !== "agent") {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Forbidden for this role" } }));
+    return;
+  }
+
+  if (ws.user?.userId !== conversation.agentId?.toString()) {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Not allowed to access this conversation" } }));
+    return;
+  }
+
+  if (conversation.status === "open") {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Conversation not yet assigned" } }));
+    return;
+  } else if (conversation.status === "closed") {
+    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Conversation already closed" } }));
+    return;
+  }
+
+  const messages = inMemoryMessages.get(conversationId);
+  if (messages && messages.length > 0) {
+    await MessageModel.insertMany(messages);
+  };
+
+  conversation.status = "closed";
+  await conversation.save();
+  broadcastToRoom(roomName, {
+    event: "CONVERSATION_CLOSED",
+    data: {
+      conversationId: conversationId
+    }
+  }, ws);
+  ws.send(JSON.stringify({ event: "CONVERSATION_CLOSED", data: { conversationId: conversationId } }));
+  const room = rooms.get(roomName);
+  if (room) {
+    room.forEach(socket => {
+      socket.rooms?.delete(roomName);
+    });
+    rooms.delete(roomName);
+  }
+  clearMessages(conversationId);
 }
