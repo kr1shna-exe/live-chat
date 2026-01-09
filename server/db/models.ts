@@ -1,7 +1,14 @@
 import mongoose from "mongoose";
 import { required } from "zod/mini";
 
-await mongoose.connect(process.env.MONGO_URL || "");
+export async function connectDB() {
+  try {
+    await mongoose.connect(process.env.MONGO_URL || "mongodb://localhost:27017/live-chat");
+    console.log("Connected to MongoDB");
+  } catch (error) {
+    console.error("Error connecting to MongoDB", error);
+  }
+}
 
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -39,7 +46,7 @@ const MessageSchema = new mongoose.Schema({
   senderId: { type: mongoose.Schema.Types.ObjectId },
   senderRole: String,
   content: String,
-  createdAt: Date.now
+  createdAt: { type: Date, default: Date.now }
 });
 
 

@@ -4,13 +4,19 @@ import jwt, { type JwtPayload } from "jsonwebtoken";
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   // const token = req.headers.authorization?.replace("Bearer ", "");
   const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({
+      "success": false,
+      "error": "Unauthorized"
+    });
+  }
   const token = authHeader?.split(" ")[1];
   if (!token) {
     return res.status(401).json({
       "success": false,
       "error": "Token missing"
-    })
-  };
+    });
+  }
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET || "123") as JwtPayload;
     req.userId = decodedToken.userId;

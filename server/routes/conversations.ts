@@ -2,9 +2,9 @@ import { Router } from "express";
 import { adminMiddleware, authMiddleware, candidateMiddleware, supervisorMiddleware } from "../lib/middlewares";
 import { conversationSchema, agentSchema } from "../types";
 import { ConversationModel, MessageModel, UserModel } from "../db/models";
+import { inMemoryMessages, type Message } from "../lib/messageStore";
 
-const router = Router();
-const inMemoryMessages = new Map<string, any[]>();
+export const router = Router();
 
 router.post("/conversations", authMiddleware, candidateMiddleware, async (req, res) => {
   const { success, data } = conversationSchema.safeParse(req.body);
@@ -24,6 +24,22 @@ router.post("/conversations", authMiddleware, candidateMiddleware, async (req, r
       "error": "Candidate already has an active conversation"
     })
   };
+
+  const supervisor = await UserModel.findById(data.supervisorId);
+  if (!supervisor) {
+    return res.status(404).json({
+      "success": false,
+      "error": "Supervisor not found"
+    })
+  };
+
+  if (supervisor.role !== "supervisor") {
+    return res.status(400).json({
+      "success": false,
+      "error": "supervisorId must point to a user with supervisor role"
+    })
+  };
+
   const newConversation = await ConversationModel.create({
     candidateId: req.userId,
     supervisorId: data.supervisorId,
@@ -57,7 +73,7 @@ router.post("/conversations/:id/assign", authMiddleware, supervisorMiddleware, a
   };
 
   if (conversation.status === "closed") {
-    return res.status(403).json({
+    return res.status(400).json({
       "success": false,
       "error": "cannot assign agent"
     });
@@ -71,10 +87,17 @@ router.post("/conversations/:id/assign", authMiddleware, supervisorMiddleware, a
   };
 
   const agent = await UserModel.findById(data.agentId);
-  if (!agent || agent.role !== "agent") {
+  if (!agent) {
     return res.status(404).json({
       "success": false,
       "error": "Agent not found"
+    });
+  };
+
+  if (agent.role !== "agent") {
+    return res.status(400).json({
+      "success": false,
+      "error": "User is not an agent"
     });
   };
 
@@ -123,7 +146,7 @@ router.get("/conversations/:id", authMiddleware, async (req, res) => {
     };
   };
 
-  let messages = [];
+  let messages: Message[] = [];
 
   if (conversation.status === "closed") {
     messages = await MessageModel.find({
@@ -131,6 +154,8 @@ router.get("/conversations/:id", authMiddleware, async (req, res) => {
     });
   } else if (conversation.status === "assigned") {
     messages = inMemoryMessages.get(conversation._id.toString()) || [];
+  } else if (conversation.status === "open") {
+    messages = [];
   }
   return res.status(200).json({
     "success": true,
@@ -154,10 +179,24 @@ router.post("/conversations/:id/close", authMiddleware, async (req, res) => {
   };
 
   const conversation = await ConversationModel.findById(req.params.id);
-  if (conversation?.status !== "open") {
+  if (!conversation) {
+    return res.status(404).json({
+      "success": false,
+      "error": "Conversation not found"
+    });
+  };
+
+  if (conversation.status === "closed") {
     return res.status(400).json({
       "success": false,
-      "error": "Conversation is either going on or closed"
+      "error": "Conversation already closed"
+    });
+  };
+
+  if (conversation.status === "assigned") {
+    return res.status(400).json({
+      "success": false,
+      "error": "Conversation is ongoing"
     });
   };
 
@@ -167,6 +206,7 @@ router.post("/conversations/:id/close", authMiddleware, async (req, res) => {
       "error": "You can only close conversations assigned to you"
     });
   };
+
   conversation.status = "closed";
   await conversation.save();
   return res.status(200).json({
@@ -178,7 +218,7 @@ router.post("/conversations/:id/close", authMiddleware, async (req, res) => {
   });
 });
 
-router.get("/admin/analytics", adminMiddleware, async (req, res) => {
+router.get("/admin/analytics", authMiddleware, adminMiddleware, async (req, res) => {
   let analyticsData = [];
 
   const supervisors = await UserModel.find({

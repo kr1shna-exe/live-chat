@@ -5,9 +5,9 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { authMiddleware } from "../lib/middlewares";
 
-const router = Router();
+export const router = Router();
 
-router.post("/auth/signup", async (req, res) => {
+router.post("/signup", async (req, res) => {
   const { success, data } = registerSchema.safeParse(req.body);
   if (!success) {
     return res.status(400).json({
@@ -15,6 +15,30 @@ router.post("/auth/signup", async (req, res) => {
       "error": "Invalid request schema"
     })
   }
+  if (data.role === "agent") {
+    if (!data.supervisorId) {
+      return res.status(400).json({
+        "success": false,
+        "error": "SupervisorId is required"
+      });
+    }
+
+    const supervisor = await UserModel.findById(data.supervisorId);
+    if (!supervisor) {
+      return res.status(404).json({
+        "success": false,
+        "error": "Supervisor not found"
+      })
+    };
+
+    if (supervisor.role !== "supervisor") {
+      return res.status(400).json({
+        "success": false,
+        "error": "Supervisorid must point to user with a supervisor id"
+      });
+    };
+  }
+
   const existingUser = await UserModel.findOne({
     email: data.email
   })
@@ -43,7 +67,7 @@ router.post("/auth/signup", async (req, res) => {
   });
 });
 
-router.post("/auth/login", async (req, res) => {
+router.post("/login", async (req, res) => {
   const { success, data } = loginSchema.safeParse(req.body);
   if (!success) {
     return res.status(400).json({
@@ -55,7 +79,7 @@ router.post("/auth/login", async (req, res) => {
     email: data.email
   })
   if (!existingUser) {
-    return res.status(404).json({
+    return res.status(401).json({
       "success": false,
       "error": "User not found"
     })
@@ -79,10 +103,8 @@ router.post("/auth/login", async (req, res) => {
   })
 });
 
-router.get("/auth/me", authMiddleware, async (req, res) => {
-  const user = await UserModel.findOne({
-    userId: req.userId
-  });
+router.get("/me", authMiddleware, async (req, res) => {
+  const user = await UserModel.findById(req.userId);
   if (!user) {
     return res.status(404).json({
       "success": false,

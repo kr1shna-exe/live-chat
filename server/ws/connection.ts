@@ -4,68 +4,76 @@ import type { ExtendWebSocket } from "./types";
 import { IncomingMessage } from "http";
 import { handleCloseConversation, handleJoinConversation, handleLeaveConversation, handleSendMessage } from "./handlers";
 import { leaveRoom, rooms } from "./rooms";
+import type { Server } from "http";
 
-export const wss = new WebSocketServer({ port: 8000 });
 
-wss.on('connection', (ws: ExtendWebSocket, req: IncomingMessage) => {
-  const url = new URL(req.url || '', "http://localhost");
-  const token = url.searchParams.get("token");
-
-  if (!token) {
-    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Unauthorized or invalid token" } }));
-    ws.close();
-    return;
-  }
-  try {
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET || "123") as JwtPayload;
-    ws.user = {
-      userId: decodedToken.userId,
-      role: decodedToken.role
-    }
-    ws.rooms = new Set();
-  } catch (error) {
-    ws.send(JSON.stringify({ event: "ERROR", data: { message: "Unauthorized or invalid token" } }));
-    ws.close();
-    return;
-  }
-
-  ws.on('message', async (data) => {
-    try {
-      const message = JSON.parse(data.toString());
-      if (!message.event) {
-        ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid message format" } }));
-        return;
-      }
-
-      switch (message.event) {
-        case "JOIN_CONVERSATION":
-          await handleJoinConversation(ws, message.data);
-          break;
-
-        case "SEND_MESSAGE":
-          await handleSendMessage(ws, message.data);
-          break;
-
-        case "LEAVE_CONVERSATION":
-          await handleLeaveConversation(ws, message.data);
-          break;
-
-        case "CLOSE_CONVERSATION":
-          await handleCloseConversation(ws, message.data);
-          break;
-
-        default:
-          ws.send(JSON.stringify({ event: "ERROR", data: { message: "Unknown event" } }));
-      }
-    } catch (error) {
-      ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid message format" } }));
-    }
-  });
-
-  ws.on('close', () => {
-    ws.rooms?.forEach(roomName => {
-      leaveRoom(ws, roomName)
-    })
+export function initWebSocket(httpServer: Server) {
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: "/ws"
   })
 
-});
+  wss.on('connection', (ws: ExtendWebSocket, req: IncomingMessage) => {
+    const url = new URL(req.url || '', "http://localhost");
+    const token = url.searchParams.get("token");
+
+    if (!token) {
+      ws.send(JSON.stringify({ event: "ERROR", data: { message: "Unauthorized or invalid token" } }));
+      ws.close();
+      return;
+    }
+    try {
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET || "123") as JwtPayload;
+      ws.user = {
+        userId: decodedToken.userId,
+        role: decodedToken.role
+      }
+      ws.rooms = new Set();
+    } catch (error) {
+      ws.send(JSON.stringify({ event: "ERROR", data: { message: "Unauthorized or invalid token" } }));
+      ws.close();
+      return;
+    }
+
+    ws.on('message', async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        if (!message.event) {
+          ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid message format" } }));
+          return;
+        }
+
+        switch (message.event) {
+          case "JOIN_CONVERSATION":
+            await handleJoinConversation(ws, message.data);
+            break;
+
+          case "SEND_MESSAGE":
+            await handleSendMessage(ws, message.data);
+            break;
+
+          case "LEAVE_CONVERSATION":
+            await handleLeaveConversation(ws, message.data);
+            break;
+
+          case "CLOSE_CONVERSATION":
+            await handleCloseConversation(ws, message.data);
+            break;
+
+          default:
+            ws.send(JSON.stringify({ event: "ERROR", data: { message: "Unknown event" } }));
+        }
+      } catch (error) {
+        ws.send(JSON.stringify({ event: "ERROR", data: { message: "Invalid message format" } }));
+      }
+    });
+
+    ws.on('close', () => {
+      const currentRooms = [...(ws.rooms || [])];
+      currentRooms.forEach(roomName => {
+        leaveRoom(ws, roomName);
+      })
+    })
+
+  });
+}
